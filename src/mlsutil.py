@@ -3,46 +3,92 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-def team_stats_raw_file_path_for(year):
-    return '../raw/team-{}-reg.html'.format(year)
+class TeamStatsConfig():
+    name = 'team-stats'
+    raw_path_template = '../raw/team-{}-reg.html'
+    data_path_template = '../data/team-stats-{}.csv'
+    url_template = 'https://www.mlssoccer.com/stats/team?year={}&season_type=REG'
+    table_index = 'Club'
+
+    @staticmethod
+    def fixup(table):
+        pass
 
 
-def team_stats_datafile_path_for(year):
-    return "../data/team-stats-{}.csv".format(year)
+class TeamStandingsConfig():
+    name = 'team-standings-ss'
+    raw_path_template = '../raw/team-standings-ss-{}.html'
+    data_path_template = '../data/team-standings-ss-{}.csv'
+    url_template = 'https://www.mlssoccer.com/standings/supporters-shield/{}/'
+    table_index = '#'
+
+    @staticmethod
+    def fixup(table):
+        '''
+        Fixup the standings table so that it can be converted using our generic table converter
+        '''
+        # remove the first row, it is a secondary level header row
+        table.tr.extract()
+
+        # convert the first row in the table to hold th rather than td elements
+        for tag in table.tr.find_all('td'):
+            tag.name = 'th'
+
+        # the Club column includes spans for mobile which erratically abreviate the team name
+        # so clear those spans
+        for span in table.select('.show-on-mobile-inline'):
+            span.clear()
 
 
-def team_stats_download_raw_for(year):
-    '''
-    Download html team stats for `year` from mlssoccer.com.
-    '''
-    file_path = team_stats_raw_file_path_for(year)
-    url = 'https://www.mlssoccer.com/stats/team?year={}&season_type=REG'.format(year)
-    r = requests.get(url)
-    with open(file_path, 'w', encoding='utf-8') as f:
-        f.write(r.text)
+class Statistics():
+    def __init__(self, config):
+        self.config = config
 
+    def source_url(self, year):
+        return self.config.url_template.format(year)
 
-def team_stats_convert_raw_to_csv_for(year):
-    '''
-    Convert the raw html data into a csv for later statistical
-    fun.
-    '''
-    html_file_path = team_stats_raw_file_path_for(year)
-    # open up the html file and get a reference to any tables
-    with open(html_file_path) as f:
-        soup = BeautifulSoup(f, 'lxml')
+    def raw_path(self, year):
+        return self.config.raw_path_template.format(year)
 
-    table_elements = soup.find_all('table')
+    def data_path(self, year):
+        return self.config.data_path_template.format(year)
 
-    # just assume there is only one
-    table_element = table_elements[0]
+    def fixup_table(self, table):
+        return self.config.fixup(table)
 
-    # import the data into a DataFrame
-    df = table_to_dataframe(table_element)
+    def download_raw_for(self, year):
+        '''
+        Download html statistic for `year` from mlssoccer.com.
+        '''
+        file_path = self.raw_path(year)
+        url = self.source_url(year)
+        r = requests.get(url)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(r.text)
 
-    # reset the index to be the first column
-    df.set_index('Club', drop = True, inplace = True)
-    df.to_csv(team_stats_datafile_path_for(year))
+    def convert_raw_to_csv_for(self, year):
+        '''
+        Convert the raw html data into a csv for later statistical fun.
+        '''
+        html_file_path = self.raw_path(year)
+        # open up the html file and get a reference to any tables
+        with open(html_file_path) as f:
+            soup = BeautifulSoup(f, 'lxml')
+
+        table_elements = soup.find_all('table')
+
+        # just assume there is only one
+        table_element = table_elements[0]
+
+        # adjust the table before conversion
+        self.fixup_table(table_element)
+
+        # import the data into a DataFrame
+        df = table_to_dataframe(table_element)
+
+        # reset the index to be the first column
+        df.set_index(self.config.table_index, drop = True, inplace = True)
+        df.to_csv(self.data_path(year))
 
 
 def table_to_dataframe(table_element):
