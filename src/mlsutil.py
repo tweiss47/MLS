@@ -15,6 +15,20 @@ class TeamStatsConfig():
         pass
 
 
+# TODO: This isn't going to work for the results page as it loads the results
+# dynamically
+class TeamResultsConfig():
+    name = 'team-results'
+    raw_path_template = '../raw/team-results-{}.html'
+    data_path_template = '../data/team-results-{}.csv'
+    url_template = 'https://www.mlssoccer.com/results/{}'
+    table_index = 'Club'
+
+    @staticmethod
+    def fixup(table):
+        pass
+
+
 class TeamStandingsConfig():
     name = 'team-standings-ss'
     raw_path_template = '../raw/team-standings-ss-{}.html'
@@ -86,11 +100,13 @@ class Statistics():
         # import the data into a DataFrame
         df = table_to_dataframe(table_element)
 
-        # reset the index to be the first column
+        # reset the index to be the specified index column
         df.set_index(self.config.table_index, drop = True, inplace = True)
         df.to_csv(self.data_path(year))
 
 
+# TODO: Pandas supports directly loading from html. Should experiment with
+# that rather than manually grabbing the data. pd.read_html()
 def table_to_dataframe(table_element):
     '''
     Convert an html table into a pandas DataFrame
